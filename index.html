@@ -214,6 +214,8 @@
             const copyToClipboard = (text, id) => {
                 const textArea = document.createElement("textarea");
                 textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
                 document.body.appendChild(textArea);
                 textArea.select();
                 try {
@@ -243,7 +245,7 @@
 
                 return (
                     <div className="min-h-screen flex items-center justify-center p-6 bg-white">
-                        <div className="bubble-card p-8 w-full max-w-sm text-center shadow-2xl">
+                        <div className="bubble-card p-8 w-full max-sm:p-6 w-full max-w-sm text-center shadow-2xl">
                             <div className="bg-sky-400 w-20 h-20 rounded-[2.2rem] flex items-center justify-center text-white mx-auto mb-6 shadow-xl shadow-sky-100">
                                 <Icon name="scissors" size={40} />
                             </div>
@@ -309,9 +311,9 @@
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
-                                                <button onClick={() => { setCurrentTemplate(t); setScaleInput({addW:0,addH:0}); setActiveTab('calculate'); }} className="p-3 text-sky-400 bg-sky-50 rounded-2xl hover:bg-sky-400 hover:text-white transition-all"><Icon name="calculator" size={22} /></button>
-                                                <button onClick={() => { setCurrentTemplate(t); setActiveTab('edit'); }} className="p-3 text-slate-400 bg-slate-50 rounded-2xl hover:bg-slate-200 hover:text-black transition-all"><Icon name="settings-2" size={22} /></button>
-                                                <button onClick={() => handleDelete(t.id)} className="p-3 text-rose-300 bg-rose-50 rounded-2xl hover:bg-rose-500 hover:text-white transition-all"><Icon name="trash-2" size={22} /></button>
+                                                <button onClick={() => { setCurrentTemplate(t); setScaleInput({addW:0,addH:0}); setActiveTab('calculate'); }} className="p-3 text-sky-400 bg-sky-50 rounded-2xl hover:bg-sky-400 hover:text-white transition-all shadow-sm"><Icon name="calculator" size={22} /></button>
+                                                <button onClick={() => { setCurrentTemplate(t); setActiveTab('edit'); }} className="p-3 text-slate-400 bg-slate-50 rounded-2xl hover:bg-slate-200 hover:text-black transition-all shadow-sm"><Icon name="settings-2" size={22} /></button>
+                                                <button onClick={() => handleDelete(t.id)} className="p-3 text-rose-300 bg-rose-50 rounded-2xl hover:bg-rose-500 hover:text-white transition-all shadow-sm"><Icon name="trash-2" size={22} /></button>
                                             </div>
                                         </div>
                                     ))
@@ -381,12 +383,18 @@
                                         <h3 className="font-black flex items-center gap-2 px-4 text-lg text-black"><Icon name="book-open" className="text-sky-400"/> 教學與參考連結</h3>
                                         <div className="grid gap-3">
                                             {currentTemplate.links.map(l => (
-                                                <div key={l.id} className="bubble-card p-4 flex items-center justify-between border-white shadow-sm">
-                                                    <div className="flex-1 overflow-hidden mr-3">
-                                                        <h4 className="font-black text-sm truncate text-black mb-0.5">{l.title || '教學連結'}</h4>
-                                                        <p className="text-[10px] text-sky-400 font-bold truncate opacity-60">{l.url}</p>
+                                                <div key={l.id} className="bubble-card p-5 flex items-center gap-5 border-white shadow-md relative overflow-hidden">
+                                                    {/* 左側連結圖示框 - 提升一致性 */}
+                                                    <div className="w-14 h-14 rounded-2xl bg-sky-50 text-sky-400 flex items-center justify-center shrink-0 shadow-inner">
+                                                        <Icon name="link" size={24} />
                                                     </div>
-                                                    <button onClick={() => copyToClipboard(l.url, l.id)} className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 ${copyFeedback === l.id ? 'bg-emerald-500 text-white shadow-lg':'bg-sky-50 text-black border border-sky-100 active:bg-sky-100'}`}>
+                                                    {/* 中間文字區塊 - 使用 min-w-0 與 truncate 防止溢出 */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="font-black text-sm text-black truncate mb-0.5">{l.title || '教學連結'}</h4>
+                                                        <p className="text-[10px] text-sky-300 font-bold truncate opacity-60 tracking-tight">{l.url}</p>
+                                                    </div>
+                                                    {/* 右側按鈕 */}
+                                                    <button onClick={() => copyToClipboard(l.url, l.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all shrink-0 ${copyFeedback === l.id ? 'bg-emerald-500 text-white shadow-lg':'bg-sky-50 text-black border border-sky-100 active:bg-sky-100'}`}>
                                                         {copyFeedback === l.id ? '已複製' : '複製網址'}
                                                     </button>
                                                 </div>
