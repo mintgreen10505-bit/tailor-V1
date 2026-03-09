@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>裁縫小助手</title>
+    <title>裁縫小助手 - 穩定版</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -71,14 +71,16 @@
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global Firebase logic for React
+        // 確保 FB 物件在 React 執行前就緒
         window.FB = { initializeApp, getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, signInWithCustomToken, signInAnonymously };
+        // 觸發自定義事件通知 React Firebase 已就緒
+        window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
 
-        // 🌟 Icon 組件 🌟
+        // 🌟 強化版 Icon 組件 🌟
         const Icon = ({ name, size = 24, className = "" }) => {
             const iconRef = useRef(null);
             useEffect(() => {
@@ -105,6 +107,7 @@
 
         function App() {
             const [user, setUser] = useState(null);
+            const [fbReady, setFbReady] = useState(!!window.FB);
             const [authLoading, setAuthLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('list');
             const [templates, setTemplates] = useState([]);
@@ -112,70 +115,88 @@
             const [scaleInput, setScaleInput] = useState({ addW: 0, addH: 0 });
             const [copyFeedback, setCopyFeedback] = useState(null);
 
-            // Firebase Config
             const firebaseConfig = JSON.parse(window.__firebase_config || "{}");
             const appId = window.__app_id || 'default-app';
             
-            const [auth, setAuth] = useState(null);
-            const [db, setDb] = useState(null);
+            const authRef = useRef(null);
+            const dbRef = useRef(null);
 
-            // Initialize Firebase
+            // 監聽 Firebase 是否就緒
             useEffect(() => {
-                if (window.FB && firebaseConfig.apiKey) {
-                    const app = window.FB.initializeApp(firebaseConfig);
-                    const fbAuth = window.FB.getAuth(app);
-                    const fbDb = window.FB.getFirestore(app);
-                    setAuth(fbAuth);
-                    setDb(fbDb);
+                const handleFbReady = () => setFbReady(true);
+                window.addEventListener('firebase-ready', handleFbReady);
+                return () => window.removeEventListener('firebase-ready', handleFbReady);
+            }, []);
 
-                    // Auth state listener (Rule 3)
+            // 初始化 Firebase (Rule 3)
+            useEffect(() => {
+                if (fbReady && window.FB && firebaseConfig.apiKey) {
+                    const app = window.FB.initializeApp(firebaseConfig);
+                    authRef.current = window.FB.getAuth(app);
+                    dbRef.current = window.FB.getFirestore(app);
+
                     const initAuth = async () => {
                         if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-                            await window.FB.signInWithCustomToken(fbAuth, window.__initial_auth_token);
+                            try {
+                                await window.FB.signInWithCustomToken(authRef.current, window.__initial_auth_token);
+                            } catch(e) {
+                                console.error("Custom token login failed", e);
+                            }
                         }
                     };
                     initAuth();
 
-                    const unsubscribe = window.FB.onAuthStateChanged(fbAuth, (u) => {
+                    const unsubscribe = window.FB.onAuthStateChanged(authRef.current, (u) => {
                         setUser(u);
                         setAuthLoading(false);
                     });
                     return () => unsubscribe();
                 }
-            }, []);
+            }, [fbReady]);
 
-            // Fetch Data from Firestore (Rule 1 & 2)
+            // 讀取資料 (Rule 1 & 2)
             useEffect(() => {
-                if (db && user && auth) {
-                    const templatesRef = window.FB.collection(db, 'artifacts', appId, 'users', user.uid, 'templates');
+                if (dbRef.current && user) {
+                    const templatesRef = window.FB.collection(dbRef.current, 'artifacts', appId, 'users', user.uid, 'templates');
                     const unsubscribe = window.FB.onSnapshot(templatesRef, (snapshot) => {
                         const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
                         setTemplates(data);
                     }, (err) => console.error("Firestore error:", err));
                     return () => unsubscribe();
                 }
-            }, [db, user, auth]);
+            }, [user]);
 
             const handleSave = async (data) => {
-                if (!db || !user) return;
+                if (!dbRef.current || !user) return;
                 const templateId = data.id || Date.now().toString();
-                const docRef = window.FB.doc(db, 'artifacts', appId, 'users', user.uid, 'templates', templateId);
+                const docRef = window.FB.doc(dbRef.current, 'artifacts', appId, 'users', user.uid, 'templates', templateId);
                 await window.FB.setDoc(docRef, { ...data, id: templateId, updatedAt: Date.now() });
                 setActiveTab('list');
             };
 
             const handleDelete = async (id) => {
-                if (confirm("確定要刪除嗎？") && db && user) {
-                    const docRef = window.FB.doc(db, 'artifacts', appId, 'users', user.uid, 'templates', id);
+                if (confirm("確定要刪除嗎？") && dbRef.current && user) {
+                    const docRef = window.FB.doc(dbRef.current, 'artifacts', appId, 'users', user.uid, 'templates', id);
                     await window.FB.deleteDoc(docRef);
                 }
             };
 
             const handleLogout = () => {
-                if (auth) window.FB.signOut(auth);
+                if (authRef.current) window.FB.signOut(authRef.current);
             };
 
-            const calculate = (comp, addW, addH, sa) => {
+            const copyToClipboard = (url, id) => {
+                const el = document.createElement('textarea');
+                el.value = url;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                setCopyFeedback(id);
+                setTimeout(() => setCopyFeedback(null), 2000);
+            };
+
+            const calculateSize = (comp, addW, addH, sa) => {
                 let w = parseFloat(comp.baseW) || 0;
                 let h = parseFloat(comp.baseH) || 0;
                 const offset = comp.includeSA ? parseFloat(sa) || 0 : 0;
@@ -185,7 +206,6 @@
                 return { w: (w + 2 * offset).toFixed(1), h: (h + 2 * offset).toFixed(1) };
             };
 
-            // Auth Form Component
             const AuthForm = () => {
                 const [email, setEmail] = useState('');
                 const [password, setPassword] = useState('');
@@ -197,12 +217,12 @@
                     setError('');
                     try {
                         if (isSignUp) {
-                            await window.FB.createUserWithEmailAndPassword(auth, email, password);
+                            await window.FB.createUserWithEmailAndPassword(authRef.current, email, password);
                         } else {
-                            await window.FB.signInWithEmailAndPassword(auth, email, password);
+                            await window.FB.signInWithEmailAndPassword(authRef.current, email, password);
                         }
                     } catch (err) {
-                        setError("登入失敗：請檢查帳號密碼。");
+                        setError("驗證失敗：請檢查輸入資訊。");
                     }
                 };
 
@@ -213,19 +233,19 @@
                                 <div className="bg-sky-400 w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white mx-auto mb-4 shadow-lg shadow-sky-100">
                                     <Icon name="scissors" size={32} />
                                 </div>
-                                <h2 className="text-2xl font-black">歡迎使用裁縫小助手</h2>
-                                <p className="text-slate-400 font-medium mt-2">{isSignUp ? '建立帳號以儲存模板' : '登入以存取您的模板'}</p>
+                                <h2 className="text-2xl font-black">裁縫小助手</h2>
+                                <p className="text-slate-400 font-medium mt-2">請登入以同步您的模板資料</p>
                             </div>
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <input type="email" placeholder="電子信箱" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-bold" required />
                                 <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-bold" required />
                                 {error && <p className="text-rose-500 text-xs font-bold px-2">{error}</p>}
-                                <button type="submit" className="w-full bg-sky-400 text-white font-black py-4 rounded-2xl shadow-xl hover:bg-sky-500 transition-all active:scale-95">
-                                    {isSignUp ? '註冊' : '登入'}
+                                <button type="submit" className="w-full bg-sky-400 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 transition-all">
+                                    {isSignUp ? '立即註冊' : '登入系統'}
                                 </button>
                             </form>
-                            <button onClick={() => setIsSignUp(!isSignUp)} className="w-full mt-6 text-sm font-bold text-sky-500 hover:underline">
-                                {isSignUp ? '已有帳號？返回登入' : '還沒有帳號？立即註冊'}
+                            <button onClick={() => setIsSignUp(!isSignUp)} className="w-full mt-6 text-sm font-bold text-sky-500">
+                                {isSignUp ? '已有帳號？返回登入' : '還沒有帳號？點此註冊'}
                             </button>
                         </div>
                     </div>
@@ -245,16 +265,14 @@
                             <h1 className="text-2xl font-black italic">裁縫小助手</h1>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleLogout} className="p-2.5 text-slate-400 hover:text-rose-500 bg-white rounded-xl shadow-sm border border-sky-50 transition-all">
+                            <button onClick={handleLogout} title="登出" className="p-2.5 text-slate-400 hover:text-rose-500 bg-white rounded-xl border border-sky-50">
                                 <Icon name="log-out" size={20} />
                             </button>
                             {activeTab === 'list' && (
                                 <button onClick={() => { 
                                     setCurrentTemplate({ name: '新作品', baseWidth: 14, baseHeight: 11.5, seamAllowance: 1.0, components: [{ id: 1, name: '表布', baseW: 14, baseH: 11.5, type: 'both', quantity: 2, includeSA: true }], links: [] });
                                     setActiveTab('edit');
-                                }} className="bg-sky-400 text-white px-6 py-2.5 rounded-full font-bold shadow-md active:scale-95">
-                                    新增作品
-                                </button>
+                                }} className="bg-sky-400 text-white px-6 py-2.5 rounded-full font-bold shadow-md active:scale-95">新增作品</button>
                             )}
                         </div>
                     </header>
@@ -265,13 +283,13 @@
                                 {templates.length === 0 ? (
                                     <div className="text-center py-20 bubble-card border-dashed border-2 border-sky-100 shadow-none bg-transparent">
                                         <Icon name="sparkles" size={48} className="mx-auto text-sky-200 mb-4" />
-                                        <p className="text-sky-300 font-bold">Hi {user.email}，建立您的第一個模板吧！</p>
+                                        <p className="text-sky-300 font-bold">目前尚無模板</p>
                                     </div>
                                 ) : (
                                     templates.map(t => (
                                         <div key={t.id} className="bubble-card p-6 flex justify-between items-center border-white">
-                                            <div>
-                                                <h3 className="text-xl font-black mb-1">{t.name}</h3>
+                                            <div className="flex-1 mr-4">
+                                                <h3 className="text-xl font-black mb-1 truncate">{t.name}</h3>
                                                 <div className="flex gap-3 text-sm font-bold text-sky-400">
                                                     <span className="bg-sky-50 px-2 py-0.5 rounded-lg">{t.baseWidth}×{t.baseHeight}cm</span>
                                                     <span>縫份 {t.seamAllowance}cm</span>
@@ -313,7 +331,27 @@
                                     </div>
                                 </div>
 
-                                <div className="space-y-4 pb-12">
+                                {/* 🌸 教學連結編輯區 (修正遺失功能) 🌸 */}
+                                <div className="bubble-card p-8 border-white">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h2 className="text-xl font-black flex items-center gap-2"><Icon name="link" className="text-sky-400"/> 教學連結管理</h2>
+                                        <button onClick={() => setCurrentTemplate({...currentTemplate, links: [...(currentTemplate.links || []), {id: Date.now(), title:'', url:''}]})} className="text-xs font-black text-sky-500 bg-sky-50 px-3 py-1.5 rounded-xl">+ 新增連結</button>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {(currentTemplate.links || []).map((link, idx) => (
+                                            <div key={link.id} className="flex gap-3 p-4 bg-sky-50/20 rounded-[1.5rem] items-center">
+                                                <div className="flex-1 space-y-2">
+                                                    <input type="text" placeholder="教學標題 (如: 裡布縫法)" value={link.title} onChange={e => { const nl = [...currentTemplate.links]; nl[idx].title = e.target.value; setCurrentTemplate({...currentTemplate, links: nl}); }} className="w-full bg-white p-2 rounded-lg text-sm font-black outline-none" />
+                                                    <input type="text" placeholder="URL 網址" value={link.url} onChange={e => { const nl = [...currentTemplate.links]; nl[idx].url = e.target.value; setCurrentTemplate({...currentTemplate, links: nl}); }} className="w-full bg-white/50 p-2 rounded-lg text-xs font-medium outline-none" />
+                                                </div>
+                                                <button onClick={() => setCurrentTemplate({...currentTemplate, links: currentTemplate.links.filter((_, i) => i !== idx)})} className="text-rose-300 hover:text-rose-500"><Icon name="trash-2" size={20} /></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 零件配置 */}
+                                <div className="space-y-4">
                                     <div className="flex justify-between items-center px-4">
                                         <h2 className="text-xl font-black flex items-center gap-2"><Icon name="ruler" className="text-sky-400"/> 零件配置</h2>
                                         <button onClick={() => setCurrentTemplate({...currentTemplate, components: [...currentTemplate.components, {id: Date.now(), name:'新零件', baseW:10, baseH:10, type:'both', quantity:1, includeSA:true}]})} className="bg-sky-400 text-white px-5 py-2 rounded-2xl font-black text-sm shadow-md">+ 增加零件</button>
@@ -330,13 +368,17 @@
                                                 </label>
                                             </div>
                                             <div className="grid grid-cols-4 gap-3">
-                                                {['寬', '高', '數量'].map((label, i) => (
-                                                    <div key={i} className="text-center">
-                                                        <label className="text-[9px] font-black text-black/20 block mb-1">{label}</label>
-                                                        <input type="number" value={Object.values(comp)[i+2]} onChange={e => { 
+                                                {/* 修正 brittle Object.values 邏輯 */}
+                                                {[
+                                                    { key: 'baseW', label: '寬' },
+                                                    { key: 'baseH', label: '高' },
+                                                    { key: 'quantity', label: '數量' }
+                                                ].map((field) => (
+                                                    <div key={field.key} className="text-center">
+                                                        <label className="text-[9px] font-black text-black/20 block mb-1">{field.label}</label>
+                                                        <input type="number" value={comp[field.key]} onChange={e => { 
                                                             const nc = [...currentTemplate.components]; 
-                                                            const keys = ['baseW', 'baseH', 'quantity'];
-                                                            nc[idx][keys[i]] = e.target.value; 
+                                                            nc[idx][field.key] = e.target.value; 
                                                             setCurrentTemplate({...currentTemplate, components: nc}); 
                                                         }} className="w-full bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none" />
                                                     </div>
@@ -352,8 +394,8 @@
                                     ))}
                                 </div>
 
-                                <div className="flex gap-4 pt-6 pb-20">
-                                    <button onClick={() => handleSave(currentTemplate)} className="flex-1 bg-sky-400 text-white font-black py-5 rounded-[2rem] shadow-xl">雲端儲存</button>
+                                <div className="flex gap-4 pt-6 pb-12">
+                                    <button onClick={() => handleSave(currentTemplate)} className="flex-1 bg-sky-400 text-white font-black py-5 rounded-[2rem] shadow-xl active:scale-95 transition-all">雲端儲存</button>
                                     <button onClick={() => setActiveTab('list')} className="px-10 bg-slate-100 text-slate-500 font-black py-5 rounded-[2rem]">取消</button>
                                 </div>
                             </div>
@@ -375,10 +417,30 @@
                                     </div>
                                 </div>
 
+                                {/* 🌸 教學連結顯示區 (修正遺失功能) 🌸 */}
+                                {currentTemplate.links?.length > 0 && (
+                                    <div className="space-y-3">
+                                        <h3 className="font-black flex items-center gap-2 px-4 text-lg"><Icon name="book-open" className="text-sky-400"/> 教學與參考連結</h3>
+                                        <div className="grid gap-2">
+                                            {currentTemplate.links.map(l => (
+                                                <div key={l.id} className="bubble-card p-5 flex items-center justify-between border-white">
+                                                    <div className="flex-1 overflow-hidden mr-4">
+                                                        <h4 className="font-black text-sm truncate">{l.title || '無標題連結'}</h4>
+                                                        <p className="text-[10px] text-sky-300 font-bold truncate">{l.url}</p>
+                                                    </div>
+                                                    <button onClick={() => copyToClipboard(l.url, l.id)} className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black transition-all ${copyFeedback === l.id ? 'bg-emerald-500 text-white shadow-lg':'bg-sky-50 text-black border border-sky-100'}`}>
+                                                        {copyFeedback === l.id ? '已複製' : '複製網址'}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="space-y-4">
-                                    <h3 className="font-black flex items-center gap-2 px-4 text-lg"><Icon name="scissors" className="text-sky-400"/> 裁切清單</h3>
+                                    <h3 className="font-black flex items-center gap-2 px-4 text-lg"><Icon name="scissors" className="text-sky-400"/> 最終裁切清單</h3>
                                     {currentTemplate.components.map(comp => {
-                                        const res = calculate(comp, scaleInput.addW, scaleInput.addH, currentTemplate.seamAllowance);
+                                        const res = calculateSize(comp, scaleInput.addW, scaleInput.addH, currentTemplate.seamAllowance);
                                         return (
                                             <div key={comp.id} className="bubble-card p-6 flex items-center gap-6 border-white">
                                                 <div className="w-16 h-16 rounded-[1.5rem] bg-sky-400 text-white flex flex-col items-center justify-center font-black shadow-lg">
@@ -410,7 +472,7 @@
                             <span className="text-[10px]">我的作品</span>
                         </button>
                         <button onClick={() => { 
-                            setCurrentTemplate({ name: '新作品', baseWidth: 14, baseHeight: 11.5, seamAllowance: 1.0, components: [{ id: 1, name: '表布', baseW: 14, baseH: 11.5, type: 'both', quantity: 2, includeSA: true }], links: [] });
+                            setCurrentTemplate({ name: '新作品', baseWidth: 14, baseHeight: 11.5, seamAllowance: 1.0, components: [{ id: Date.now(), name: '表布', baseW: 14, baseH: 11.5, type: 'both', quantity: 2, includeSA: true }], links: [] });
                             setActiveTab('edit');
                         }} className={`flex flex-col items-center py-2 px-8 rounded-2xl transition-all ${activeTab === 'edit' ? 'text-black bg-sky-50 font-black shadow-inner' : 'text-slate-300 font-bold'}`}>
                             <Icon name="plus" size={22} className="mb-1" />
