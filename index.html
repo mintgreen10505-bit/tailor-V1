@@ -50,6 +50,8 @@
             return <span ref={iconRef} className="inline-flex items-center justify-center"></span>;
         };
 
+        const COMPONENT_TYPES = [{ id: 'both', label: '全縮放' }, { id: 'width', label: '僅寬度' }, { id: 'height', label: '僅高度' }, { id: 'fixed', label: '固定' }];
+
         function App() {
             const [user, setUser] = useState(null);
             const [authLoading, setAuthLoading] = useState(true);
@@ -58,7 +60,6 @@
             const [currentTemplate, setCurrentTemplate] = useState(null);
             const [scaleInput, setScaleInput] = useState({ addW: 0, addH: 0 });
 
-            // ⚠️ 請在此填入您的 Firebase Config ⚠️
             const firebaseConfig = {
                 apiKey: "AIzaSyAwajTS9acHu-AS3Ic2f50eThVgo6XxLEM",
                 authDomain: "mintgreen-app.firebaseapp.com",
@@ -86,7 +87,7 @@
 
             useEffect(() => {
                 if (dbRef.current && user) {
-                    // 對接截圖中的路徑：inventory -> {uid} -> items
+                    // 🌟 對接您截圖中的 inventory 集合 🌟
                     const q = window.FB.query(window.FB.collection(dbRef.current, 'inventory', user.uid, 'items'), window.FB.orderBy('updatedAt', 'desc'));
                     const unsubscribe = window.FB.onSnapshot(q, (snapshot) => {
                         setTemplates(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
@@ -103,7 +104,7 @@
             };
 
             const handleDelete = async (id) => {
-                if (confirm("確定刪除嗎？")) await window.FB.deleteDoc(window.FB.doc(dbRef.current, 'inventory', user.uid, 'items', id));
+                if (confirm("確定刪除此模板嗎？")) await window.FB.deleteDoc(window.FB.doc(dbRef.current, 'inventory', user.uid, 'items', id));
             };
 
             const calculateSize = (comp, addW, addH, sa) => {
@@ -113,14 +114,17 @@
                 return { w: (w + 2 * offset).toFixed(1), h: (h + 2 * offset).toFixed(1) };
             };
 
-            if (authLoading) return <div className="h-screen flex items-center justify-center text-sky-400 font-black">工作台準備中...</div>;
+            if (authLoading) return <div className="h-screen flex items-center justify-center text-sky-400 font-black">海鹽藍工作台準備中...</div>;
 
             if (!user) return (
                 <div className="h-screen flex flex-col items-center justify-center px-4">
-                    <div className="bubble-card p-10 w-full max-w-md text-center">
+                    <div className="bubble-card p-10 w-full max-w-md text-center border-white shadow-2xl">
                         <div className="bg-sky-400 w-20 h-20 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-6 shadow-lg"><Icon name="scissors" size={40} /></div>
-                        <h2 className="text-3xl font-black mb-8 italic">裁縫小助手</h2>
-                        <button onClick={() => window.FB.signInWithPopup(authRef.current, new window.FB.GoogleAuthProvider())} className="w-full bg-sky-400 text-white font-black py-4 rounded-2xl shadow-xl">Google 帳號登入</button>
+                        <h2 className="text-3xl font-black mb-2 italic">裁縫小助手</h2>
+                        <p className="text-slate-400 font-bold mb-10 text-sm">請登入以同步雲端作品</p>
+                        <button onClick={() => window.FB.signInWithPopup(authRef.current, new window.FB.GoogleAuthProvider())} className="w-full bg-sky-400 text-white font-black py-5 rounded-3xl shadow-xl flex items-center justify-center gap-3">
+                            <Icon name="chrome" size={20} /> Google 帳號登入
+                        </button>
                     </div>
                 </div>
             );
@@ -128,20 +132,20 @@
             return (
                 <div className="max-w-2xl mx-auto min-h-screen px-4 pt-4 pb-32">
                     <header className="flex justify-between items-center mb-8 px-2">
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('list')}><div className="bg-sky-400 p-2.5 rounded-[1.2rem] text-white shadow-lg shadow-sky-100"><Icon name="scissors" size={24} /></div><h1 className="text-2xl font-black italic">裁縫小助手</h1></div>
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('list')}><div className="bg-sky-400 p-2.5 rounded-[1.2rem] text-white shadow-lg"><Icon name="scissors" size={24} /></div><h1 className="text-2xl font-black italic">裁縫小助手</h1></div>
                         <button onClick={() => window.FB.signOut(authRef.current)} className="p-2.5 text-slate-300 bg-white rounded-xl border border-sky-50 shadow-sm"><Icon name="log-out" size={18} /></button>
                     </header>
 
                     <div className="page-transition">
                         {activeTab === 'list' && (
                             <div className="grid gap-4">
-                                {templates.length === 0 ? <div className="text-center py-20 bubble-card border-dashed border-2 border-sky-100 bg-transparent">點擊下方「建立模板」開始</div> : templates.map(t => (
-                                    <div key={t.id} className="bubble-card p-6 flex justify-between items-center border-white shadow-sm">
+                                {templates.length === 0 ? <div className="text-center py-20 bubble-card border-dashed border-2 border-sky-100 bg-transparent shadow-none"><Icon name="sparkles" size={48} className="mx-auto text-sky-100 mb-4" /><p className="text-sky-300 font-bold">歡迎！點擊下方「建立模板」開始</p></div> : templates.map(t => (
+                                    <div key={t.id} className="bubble-card p-6 flex justify-between items-center border-white shadow-sm hover:border-sky-100 transition-all">
                                         <div className="flex-1 mr-4 overflow-hidden"><h3 className="text-xl font-black mb-1 truncate">{t.name}</h3><div className="flex gap-3 text-xs font-bold text-sky-400"><span className="bg-sky-50 px-2 py-0.5 rounded-lg">{t.baseWidth}×{t.baseHeight}cm</span><span>縫份 {t.seamAllowance}cm</span></div></div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => { setCurrentTemplate(t); setScaleInput({addW:0,addH:0}); setActiveTab('calculate'); }} className="p-3 text-sky-400 bg-sky-50 rounded-2xl"><Icon name="calculator" size={20} /></button>
-                                            <button onClick={() => { setCurrentTemplate(t); setActiveTab('edit'); }} className="p-3 text-slate-300 bg-slate-50 rounded-2xl"><Icon name="edit-3" size={20} /></button>
-                                            <button onClick={() => handleDelete(t.id)} className="p-3 text-rose-200 bg-rose-50 rounded-2xl"><Icon name="trash-2" size={20} /></button>
+                                            <button onClick={() => { setCurrentTemplate(t); setScaleInput({addW:0,addH:0}); setActiveTab('calculate'); }} className="p-3 text-sky-400 bg-sky-50 rounded-2xl hover:bg-sky-400 hover:text-white transition-all"><Icon name="calculator" size={20} /></button>
+                                            <button onClick={() => { setCurrentTemplate(t); setActiveTab('edit'); }} className="p-3 text-slate-300 bg-slate-50 rounded-2xl hover:bg-slate-200 transition-all"><Icon name="edit-3" size={20} /></button>
+                                            <button onClick={() => handleDelete(t.id)} className="p-3 text-rose-200 bg-rose-50 rounded-2xl hover:bg-rose-500 hover:text-white transition-all"><Icon name="trash-2" size={20} /></button>
                                         </div>
                                     </div>
                                 ))}
@@ -150,63 +154,30 @@
 
                         {activeTab === 'edit' && currentTemplate && (
                             <div className="space-y-6">
-                                <div className="bubble-card p-8 border-white">
+                                <div className="bubble-card p-8 border-white shadow-sm">
                                     <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Icon name="settings-2" className="text-sky-400"/> 基本設定</h2>
                                     <div className="space-y-4">
-                                        <input type="text" value={currentTemplate.name} onChange={e => setCurrentTemplate({...currentTemplate, name: e.target.value})} className="w-full bg-sky-50/50 rounded-2xl p-4 font-black outline-none" placeholder="作品名稱" />
+                                        <div className="bg-sky-50/30 p-5 rounded-[2rem] border border-sky-100"><label className="text-[10px] font-black text-sky-400 uppercase tracking-widest ml-2 block mb-2">作品名稱</label><input type="text" value={currentTemplate.name} onChange={e => setCurrentTemplate({...currentTemplate, name: e.target.value})} className="w-full bg-transparent font-black text-xl outline-none" placeholder="作品名稱" /></div>
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="flex gap-1"><input type="number" value={currentTemplate.baseWidth} onChange={e => setCurrentTemplate({...currentTemplate, baseWidth: e.target.value})} className="w-full bg-sky-50/30 rounded-2xl p-4 text-center font-black outline-none" /><input type="number" value={currentTemplate.baseHeight} onChange={e => setCurrentTemplate({...currentTemplate, baseHeight: e.target.value})} className="w-full bg-sky-50/30 rounded-2xl p-4 text-center font-black outline-none" /></div>
-                                            <input type="number" step="0.1" value={currentTemplate.seamAllowance} onChange={e => setCurrentTemplate({...currentTemplate, seamAllowance: e.target.value})} className="w-full bg-cyan-50 border-2 border-cyan-100 rounded-2xl p-4 text-center font-black text-cyan-600 outline-none" />
+                                            <div className="bg-sky-50/30 p-5 rounded-[2rem] border border-sky-100"><label className="text-[10px] font-black text-sky-400 ml-2 block mb-2 uppercase tracking-widest">基準 (W×H)</label><div className="flex gap-2"><input type="number" value={currentTemplate.baseWidth} onChange={e => setCurrentTemplate({...currentTemplate, baseWidth: e.target.value})} className="w-full bg-transparent font-black text-center outline-none" /><input type="number" value={currentTemplate.baseHeight} onChange={e => setCurrentTemplate({...currentTemplate, baseHeight: e.target.value})} className="w-full bg-transparent font-black text-center outline-none" /></div></div>
+                                            <div className="bg-cyan-50/50 p-5 rounded-[2rem] border border-cyan-100"><label className="text-[10px] font-black text-cyan-500 ml-2 block mb-2 uppercase tracking-widest">預設縫份 (cm)</label><input type="number" step="0.1" value={currentTemplate.seamAllowance} onChange={e => setCurrentTemplate({...currentTemplate, seamAllowance: e.target.value})} className="w-full bg-transparent font-black text-center outline-none text-cyan-600" /></div>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="space-y-4">
-                                    <div className="flex justify-between items-center px-4"><h2 className="text-xl font-black flex items-center gap-2"><Icon name="ruler" className="text-sky-400"/> 零件設定</h2><button onClick={() => setCurrentTemplate({...currentTemplate, components: [...currentTemplate.components, { id: Date.now(), name: '新零件', baseW: 10, baseH: 10, type: 'both', quantity: 1, includeSA: true }]})} className="bg-sky-400 text-white px-5 py-2 rounded-2xl font-black text-sm shadow-md">+ 新零件</button></div>
+                                    <div className="flex justify-between items-center px-4"><h2 className="text-xl font-black flex items-center gap-2 text-black"><Icon name="ruler" className="text-sky-400"/> 零件配置</h2><button onClick={() => setCurrentTemplate({...currentTemplate, components: [...currentTemplate.components, { id: Date.now(), name: '新零件', baseW: 10, baseH: 10, type: 'both', quantity: 1, includeSA: true }]})} className="bg-sky-400 text-white px-5 py-2 rounded-2xl font-black text-sm shadow-md active:scale-95">+ 增加零件</button></div>
                                     {currentTemplate.components.map((comp, idx) => (
-                                        <div key={comp.id} className="bubble-card p-6 border-white space-y-4">
-                                            <div className="flex justify-between items-center"><input type="text" value={comp.name} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].name = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="font-black text-xl bg-transparent border-b-2 border-transparent focus:border-sky-100 outline-none w-full mr-4" /><div onClick={() => { const nc = [...currentTemplate.components]; nc[idx].includeSA = !nc[idx].includeSA; setCurrentTemplate({...currentTemplate, components: nc}); }} className={`w-9 h-5 rounded-full relative transition-all ${comp.includeSA ? 'bg-sky-400':'bg-slate-200'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${comp.includeSA ? 'left-5':'left-1'}`} /></div></div>
+                                        <div key={comp.id} className="bubble-card p-6 border-white space-y-4 shadow-sm">
+                                            <div className="flex justify-between items-center"><input type="text" value={comp.name} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].name = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="font-black text-xl bg-transparent border-b-2 border-transparent focus:border-sky-100 outline-none w-full mr-4" /><div onClick={() => { const nc = [...currentTemplate.components]; nc[idx].includeSA = !nc[idx].includeSA; setCurrentTemplate({...currentTemplate, components: nc}); }} className={`w-10 h-5 rounded-full relative transition-all ${comp.includeSA ? 'bg-sky-400':'bg-slate-200'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${comp.includeSA ? 'left-6':'left-1'}`} /></div></div>
                                             <div className="grid grid-cols-4 gap-2">
-                                                <input type="number" value={comp.baseW} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].baseW = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none" placeholder="寬" />
-                                                <input type="number" value={comp.baseH} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].baseH = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none" placeholder="高" />
-                                                <input type="number" value={comp.quantity} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].quantity = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none" placeholder="量" />
-                                                <select value={comp.type} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].type = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="bg-sky-50/50 p-2 rounded-xl font-black text-[9px] outline-none text-center"><option value="both">全縮放</option><option value="width">僅寬</option><option value="height">僅高</option><option value="fixed">固定</option></select>
+                                                {['baseW', 'baseH', 'quantity'].map((k, i) => <div key={k} className="text-center"><label className="text-[8px] font-black text-black/20 block mb-1">{['寬','高','量'][i]}</label><input type="number" value={comp[k]} onChange={e => { const nc = [...currentTemplate.components]; nc[idx][k] = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none" /></div>)}
+                                                <div className="text-center"><label className="text-[8px] font-black text-black/20 block mb-1">規則</label><select value={comp.type} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].type = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl font-black text-[9px] outline-none text-center"><option value="both">全縮放</option><option value="width">僅寬</option><option value="height">僅高</option><option value="fixed">固定</option></select></div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex gap-4 pt-6 px-2"><button onClick={() => handleSave(currentTemplate)} className="flex-1 bg-sky-400 text-white font-black py-5 rounded-[2.5rem] shadow-xl">同步至雲端</button><button onClick={() => setActiveTab('list')} className="px-10 bg-slate-50 text-slate-300 font-black py-5 rounded-[2.5rem]">返回</button></div>
+                                <div className="flex gap-4 pt-6 px-2"><button onClick={() => handleSave(currentTemplate)} className="flex-1 bg-sky-400 text-white font-black py-5 rounded-[2.5rem] shadow-xl active:scale-95 transition-all">同步雲端儲存</button><button onClick={() => setActiveTab('list')} className="px-10 bg-slate-50 text-slate-300 font-black py-5 rounded-[2.5rem]">取消</button></div>
                             </div>
                         )}
 
-                        {activeTab === 'calculate' && currentTemplate && (
-                            <div className="space-y-8 animate-in fade-in">
-                                <div className="bg-gradient-to-br from-sky-300 to-cyan-400 text-white p-10 rounded-[3.5rem] shadow-2xl"><h2 className="text-3xl font-black mb-8">{currentTemplate.name}</h2><div className="grid grid-cols-2 gap-8"><div className="space-y-2"><label className="text-[10px] font-black opacity-80 uppercase ml-4">寬度增加</label><input type="number" value={scaleInput.addW} onChange={e => setScaleInput({...scaleInput, addW: e.target.value})} className="w-full bg-white/20 backdrop-blur-md border-2 border-white/30 rounded-[2rem] p-6 text-white font-black text-5xl outline-none" /></div><div className="space-y-2"><label className="text-[10px] font-black opacity-80 uppercase ml-4">高度增加</label><input type="number" value={scaleInput.addH} onChange={e => setScaleInput({...scaleInput, addH: e.target.value})} className="w-full bg-white/20 backdrop-blur-md border-2 border-white/30 rounded-[2rem] p-6 text-white font-black text-5xl outline-none" /></div></div></div>
-                                <div className="space-y-4">
-                                    <h3 className="font-black px-4 text-lg"><Icon name="scissors" className="text-sky-400"/> 最終裁切尺寸</h3>
-                                    {currentTemplate.components.map(comp => { 
-                                        const res = calculateSize(comp, scaleInput.addW, scaleInput.addH, currentTemplate.seamAllowance); 
-                                        return (
-                                            <div key={comp.id} className="bubble-card p-6 flex items-center gap-6 border-white shadow-sm">
-                                                <div className="w-16 h-16 rounded-[1.8rem] bg-sky-400 text-white flex flex-col items-center justify-center font-black shadow-lg"><span className="text-[8px] opacity-70">數量</span><span className="text-2xl">{comp.quantity}</span></div>
-                                                <div className="flex-1"><div className="flex justify-between items-center"><span className="font-black text-lg">{comp.name}</span><span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${comp.includeSA ? 'bg-cyan-400 text-white':'bg-slate-100 text-slate-300'}`}>{comp.includeSA ? '含縫份':'淨尺寸'}</span></div><div className="flex items-baseline gap-1"><span className="text-4xl font-black">{res.w} <span className="text-lg font-normal text-sky-200 mx-1">×</span> {res.h}</span><span className="text-[10px] font-black text-sky-200 ml-1">cm</span></div></div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <button onClick={() => setActiveTab('list')} className="w-full py-6 text-sky-400 font-black bg-white/60 border-2 border-white rounded-[2.5rem] shadow-sm text-lg">返回列表</button>
-                            </div>
-                        )}
-                    </div>
-
-                    <nav className="fixed bottom-6 left-6 right-6 max-w-2xl mx-auto z-40 p-2.5 rounded-[2.8rem] nav-glass flex justify-around items-center bubble-shadow border border-sky-50 shadow-2xl">
-                        <button onClick={() => setActiveTab('list')} className={`flex flex-col items-center py-2.5 px-8 rounded-[1.8rem] transition-all ${activeTab === 'list' ? 'text-black bg-sky-50 font-black shadow-inner' : 'text-slate-300'}`}><Icon name="home" size={22} /><span className="text-[10px]">我的作品</span></button>
-                        <button onClick={() => { setCurrentTemplate({ name: '新作品', baseWidth: 14, baseHeight: 11.5, seamAllowance: 1.0, components: [{ id: Date.now(), name: '表布', baseW: 14, baseH: 11.5, type: 'both', quantity: 2, includeSA: true }], links: [] }); setActiveTab('edit'); }} className={`flex flex-col items-center py-2.5 px-8 rounded-[1.8rem] transition-all ${activeTab === 'edit' ? 'text-black bg-sky-50 font-black shadow-inner' : 'text-slate-300'}`}><Icon name="plus" size={22} /><span className="text-[10px]">建立模板</span></button>
-                        <button onClick={() => { if(currentTemplate) setActiveTab('calculate'); }} className={`flex flex-col items-center py-2.5 px-8 rounded-[1.8rem] transition-all ${activeTab === 'calculate' ? 'text-black bg-sky-50 font-black shadow-inner' : 'text-slate-300'} ${!currentTemplate ? 'opacity-10 pointer-events-none':''}`}><Icon name="calculator" size={22} /><span className="text-[10px]">尺寸計算</span></button>
-                    </nav>
-                </div>
-            );
-        }
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    </script>
-</body>
-</html>
+                        {activeTab ===
