@@ -82,7 +82,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // 🌟 Icon 組件 🌟
+        // 🌟 強化版 Icon 組件：確保每次圖示都能被渲染 🌟
         const Icon = ({ name, size = 24, className = "" }) => {
             const iconRef = useRef(null);
             useEffect(() => {
@@ -91,7 +91,7 @@
                         root: iconRef.current
                     });
                 }
-            }, [name, size]);
+            }, [name, size, className]);
 
             return (
                 <span ref={iconRef} className={`inline-flex items-center justify-center ${className}`}>
@@ -126,6 +126,7 @@
             // 1. 初始化
             useEffect(() => {
                 const init = async () => {
+                    // 如果沒有 API Key，代表尚未配置 Firebase，自動切換至本地模式
                     if (!firebaseConfig.apiKey) {
                         setIsLocalMode(true);
                         setAuthLoading(false);
@@ -134,14 +135,20 @@
 
                     const setupFirebase = () => {
                         if (window.FB) {
-                            const app = window.FB.initializeApp(firebaseConfig);
-                            authRef.current = window.FB.getAuth(app);
-                            dbRef.current = window.FB.getFirestore(app);
+                            try {
+                                const app = window.FB.initializeApp(firebaseConfig);
+                                authRef.current = window.FB.getAuth(app);
+                                dbRef.current = window.FB.getFirestore(app);
 
-                            window.FB.onAuthStateChanged(authRef.current, (u) => {
-                                setUser(u);
+                                window.FB.onAuthStateChanged(authRef.current, (u) => {
+                                    setUser(u);
+                                    setAuthLoading(false);
+                                });
+                            } catch (e) {
+                                console.error("Firebase Init Error:", e);
+                                setIsLocalMode(true);
                                 setAuthLoading(false);
-                            });
+                            }
                         }
                     };
 
@@ -161,6 +168,8 @@
                     const unsubscribe = window.FB.onSnapshot(templatesRef, (snapshot) => {
                         const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
                         setTemplates(data);
+                    }, (err) => {
+                        console.error("Firestore error:", err);
                     });
                     return () => unsubscribe();
                 }
@@ -207,30 +216,52 @@
                 const [isSignUp, setIsSignUp] = useState(false);
                 const [error, setError] = useState('');
 
-                // 🌟 新增 Google 登入邏輯 🌟
                 const handleGoogleLogin = async () => {
+                    if (!authRef.current) {
+                        setError("Firebase 尚未準備就緒，請重新整理頁面。");
+                        return;
+                    }
                     setError('');
                     try {
                         const provider = new window.FB.GoogleAuthProvider();
                         await window.FB.signInWithPopup(authRef.current, provider);
                     } catch (err) {
                         console.error(err);
-                        setError("Google 登入失敗。請檢查 Firebase 是否已啟用此功能。");
+                        if (err.code === 'auth/popup-blocked') {
+                            setError("彈出式視窗已被封鎖，請允許瀏覽器顯示彈窗。");
+                        } else if (err.code === 'auth/operation-not-allowed') {
+                            setError("請在 Firebase 後台啟用 Google 登入供應商。");
+                        } else if (err.code === 'auth/unauthorized-domain') {
+                            setError("此網域尚未在 Firebase 授權網域清單中。");
+                        } else {
+                            setError("Google 登入失敗。原因：" + err.message);
+                        }
                     }
                 };
 
                 const handleSubmit = async (e) => {
                     e.preventDefault();
+                    if (!authRef.current) return;
                     setError('');
                     try {
                         if (isSignUp) await window.FB.createUserWithEmailAndPassword(authRef.current, email, password);
                         else await window.FB.signInWithEmailAndPassword(authRef.current, email, password);
-                    } catch (err) { setError("帳號密碼錯誤。"); }
+                    } catch (err) { 
+                        setError("登入失敗：帳號密碼錯誤或尚未註冊。"); 
+                    }
                 };
 
                 return (
                     <div className="flex flex-col items-center justify-center min-h-[80vh] px-4">
-                        <div className="bubble-card p-10 w-full max-w-md">
+                        <div className="bubble-card p-10 w-full max-w-md relative overflow-hidden">
+                            {/* 連線狀態燈 */}
+                            <div className="absolute top-4 right-6 flex items-center gap-1.5">
+                                <div className={`w-2 h-2 rounded-full ${isLocalMode ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></div>
+                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">
+                                    {isLocalMode ? '未連線雲端' : '已連線 Firebase'}
+                                </span>
+                            </div>
+
                             <div className="text-center mb-8">
                                 <div className="bg-sky-400 w-16 h-16 rounded-[1.5rem] flex items-center justify-center text-white mx-auto mb-4 shadow-lg shadow-sky-100">
                                     <Icon name="scissors" size={32} />
@@ -240,35 +271,26 @@
                             </div>
 
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <input type="email" placeholder="電子信箱" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-black" required />
-                                <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-black" required />
-                                {error && <p className="text-rose-500 text-xs font-bold px-2">{error}</p>}
+                                <input type="email" placeholder="電子信箱" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-black text-black" required />
+                                <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-black text-black" required />
+                                {error && <div className="bg-rose-50 text-rose-500 text-[10px] font-black p-3 rounded-xl border border-rose-100">{error}</div>}
                                 <button type="submit" className="w-full bg-sky-400 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 transition-all">
-                                    {isSignUp ? '立即註冊' : '登入系統'}
+                                    {isSignUp ? '立即註冊' : '登入帳號'}
                                 </button>
                             </form>
 
-                            {/* 🌟 Google 登入 UI 分隔線與按鈕 🌟 */}
-                            <div className="relative my-8">
-                                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-sky-100"></div></div>
-                                <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 text-slate-300 font-black">或者</span></div>
-                            </div>
-
+                            <div className="relative my-8"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-sky-100"></div></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 text-slate-300 font-black">或者</span></div></div>
+                            
                             <button 
                                 onClick={handleGoogleLogin}
                                 className="w-full bg-white border border-sky-100 text-black font-black py-4 rounded-2xl shadow-sm flex items-center justify-center gap-3 active:scale-95 hover:bg-sky-50 transition-all mb-4"
                             >
-                                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                                </svg>
+                                <svg className="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                                 使用 Google 帳號登入
                             </button>
 
                             <button onClick={() => setIsSignUp(!isSignUp)} className="w-full mt-2 text-sm font-bold text-sky-400 underline">{isSignUp ? '已有帳號？返回登入' : '還沒有帳號？註冊一個'}</button>
-                            <div className="mt-8 pt-6 border-t border-sky-50 text-center"><button onClick={() => setIsLocalMode(true)} className="text-xs font-black text-slate-300 hover:text-sky-400 uppercase tracking-widest">使用離線模式</button></div>
+                            <div className="mt-8 pt-6 border-t border-sky-50 text-center"><button onClick={() => setIsLocalMode(true)} className="text-xs font-black text-slate-300 hover:text-sky-400 uppercase tracking-widest">使用離線本地模式</button></div>
                         </div>
                     </div>
                 );
@@ -282,10 +304,10 @@
                     <header className="flex justify-between items-center mb-8 px-2">
                         <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('list')}>
                             <div className="bg-sky-400 p-2.5 rounded-[1.2rem] text-white shadow-lg"><Icon name="scissors" size={24} /></div>
-                            <h1 className="text-2xl font-black italic">裁縫小助手</h1>
+                            <h1 className="text-2xl font-black italic text-black">裁縫小助手</h1>
                         </div>
                         <div className="flex items-center gap-2">
-                            {!isLocalMode && <button onClick={() => window.FB.signOut(authRef.current)} className="p-2.5 text-slate-400 hover:text-rose-500 bg-white rounded-xl border border-sky-50 shadow-sm"><Icon name="log-out" size={20} /></button>}
+                            {!isLocalMode && <button onClick={() => window.FB.signOut(authRef.current)} className="p-2.5 text-slate-400 hover:text-rose-500 bg-white rounded-xl border border-sky-50 shadow-sm transition-all"><Icon name="log-out" size={20} /></button>}
                             {activeTab === 'list' && <button onClick={() => { setCurrentTemplate({ name: '新作品', baseWidth: 14, baseHeight: 11.5, seamAllowance: 1.0, components: [{ id: Date.now(), name: '表布', baseW: 14, baseH: 11.5, type: 'both', quantity: 2, includeSA: true }], links: [] }); setActiveTab('edit'); }} className="bg-sky-400 text-white px-6 py-2.5 rounded-full font-black shadow-md active:scale-95 transition-all">新增作品</button>}
                         </div>
                     </header>
@@ -341,7 +363,7 @@
                                     <div className="flex justify-between items-center px-4"><h2 className="text-xl font-black flex items-center gap-2 text-black"><Icon name="ruler" className="text-sky-400"/> 零件配置</h2><button onClick={() => setCurrentTemplate({...currentTemplate, components: [...currentTemplate.components, { id: Date.now(), name: '新零件', baseW: 10, baseH: 10, type: 'both', quantity: 1, includeSA: true }]})} className="bg-sky-400 text-white px-5 py-2 rounded-2xl font-black text-sm shadow-md active:scale-95 transition-all">+ 新增零件</button></div>
                                     {currentTemplate.components.map((comp, idx) => (
                                         <div key={comp.id} className="bubble-card p-6 border-white space-y-4 shadow-sm">
-                                            <div className="flex justify-between items-center"><input type="text" value={comp.name} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].name = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="font-black text-xl bg-transparent border-b-2 border-transparent focus:border-sky-100 outline-none w-full mr-4 text-black" /><label className="flex items-center gap-2 cursor-pointer shrink-0"><span className={`text-[10px] font-black uppercase ${comp.includeSA ? 'text-black':'text-slate-300'}`}>縫份</span><div onClick={() => { const nc = [...currentTemplate.components]; nc[idx].includeSA = !nc[idx].includeSA; setCurrentTemplate({...currentTemplate, components: nc}); }} className={`w-10 h-5 rounded-full relative transition-all ${comp.includeSA ? 'bg-sky-400':'bg-slate-200'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm transition-all ${comp.includeSA ? 'left-6':'left-1'}`} /></div></label><button onClick={() => setCurrentTemplate({...currentTemplate, components: currentTemplate.components.filter((_, i) => i !== idx)})} className="text-slate-200 hover:text-rose-500"><Icon name="trash-2" size={18}/></button></div>
+                                            <div className="flex justify-between items-center"><input type="text" value={comp.name} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].name = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="font-black text-xl bg-transparent border-b-2 border-transparent focus:border-sky-100 outline-none w-full mr-4 text-black" /><label className="flex items-center gap-2 cursor-pointer shrink-0"><span className={`text-[10px] font-black uppercase ${comp.includeSA ? 'text-black':'text-slate-300'}`}>縫份</span><div onClick={() => { const nc = [...currentTemplate.components]; nc[idx].includeSA = !nc[idx].includeSA; setCurrentTemplate({...currentTemplate, components: nc}); }} className={`w-10 h-5 rounded-full relative transition-all ${comp.includeSA ? 'bg-sky-400':'bg-slate-200'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm transition-all ${comp.includeSA ? 'left-6':'left-1'}`} /></div></label><button onClick={() => setCurrentTemplate({...currentTemplate, components: currentTemplate.components.filter((_, i) => i !== idx)})} className="text-slate-200 hover:text-rose-500 transition-all"><Icon name="trash-2" size={18}/></button></div>
                                             <div className="grid grid-cols-4 gap-3">
                                                 {[{k:'baseW',l:'寬'},{k:'baseH',l:'高'},{k:'quantity',l:'數量'}].map(f => (<div key={f.k} className="text-center"><label className="text-[9px] font-black text-black/20 block mb-1">{f.l}</label><input type="number" value={comp[f.k]} onChange={e => { const nc = [...currentTemplate.components]; nc[idx][f.k] = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none text-black" /></div>))}
                                                 <div className="text-center"><label className="text-[9px] font-black text-black/20 block mb-1">規則</label><select value={comp.type} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].type = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl font-black text-[10px] outline-none appearance-none text-center text-black">{COMPONENT_TYPES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}</select></div>
@@ -357,7 +379,7 @@
                         {activeTab === 'calculate' && currentTemplate && (
                             <div className="space-y-8 animate-in fade-in pb-20">
                                 <div className="bg-gradient-to-br from-sky-300 via-sky-400 to-cyan-400 text-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute -right-10 -top-10 w-48 h-48 bg-white/10 rounded-full blur-2xl"></div><h2 className="text-3xl font-black mb-8 relative z-10">{currentTemplate.name}</h2><div className="grid grid-cols-2 gap-8 relative z-10"><div className="space-y-3"><label className="text-[10px] font-black opacity-80 uppercase tracking-widest ml-4">寬度增加 (W)</label><input type="number" value={scaleInput.addW} onChange={e => setScaleInput({...scaleInput, addW: e.target.value})} className="w-full bg-white/20 backdrop-blur-md border-2 border-white/30 rounded-[2rem] p-6 text-white font-black text-4xl outline-none" /></div><div className="space-y-3"><label className="text-[10px] font-black opacity-80 uppercase tracking-widest ml-4">高度增加 (H)</label><input type="number" value={scaleInput.addH} onChange={e => setScaleInput({...scaleInput, addH: e.target.value})} className="w-full bg-white/20 backdrop-blur-md border-2 border-white/30 rounded-[2rem] p-6 text-white font-black text-4xl outline-none" /></div></div></div>
-                                {currentTemplate.links?.length > 0 && (<div className="space-y-3"><h3 className="font-black flex items-center gap-2 px-4 text-lg text-black"><Icon name="book-open" className="text-sky-400"/> 教學與參考連結</h3><div className="grid gap-2">{currentTemplate.links.map(l => (<div key={l.id} className="bubble-card p-5 flex items-center justify-between border-white shadow-sm"><div className="flex-1 overflow-hidden mr-4"><h4 className="font-black text-sm truncate text-black">{l.title || '教學連結'}</h4><p className="text-[10px] text-sky-300 font-bold truncate">{l.url}</p></div><button onClick={() => { const el = document.createElement('textarea'); el.value = l.url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); setCopyFeedback(l.id); setTimeout(() => setCopyFeedback(null), 2000); }} className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black transition-all ${copyFeedback === l.id ? 'bg-emerald-500 text-white shadow-lg':'bg-sky-50 text-black border border-sky-100 hover:bg-sky-100'}`}>{copyFeedback === l.id ? '已複製' : '複製網址'}</button></div>))}</div></div>)}
+                                {currentTemplate.links?.length > 0 && (<div className="space-y-3"><h3 className="font-black flex items-center gap-2 px-4 text-lg text-black"><Icon name="book-open" className="text-sky-400"/> 教學與參考連結</h3><div className="grid gap-2">{currentTemplate.links.map(l => (<div key={l.id} className="bubble-card p-5 flex items-center justify-between border-white shadow-sm"><div className="flex-1 overflow-hidden mr-4"><h4 className="font-black text-sm truncate text-black">{l.title || '教學連結'}</h4><p className="text-[10px] text-sky-400 font-bold truncate">{l.url}</p></div><button onClick={() => { const el = document.createElement('textarea'); el.value = l.url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); setCopyFeedback(l.id); setTimeout(() => setCopyFeedback(null), 2000); }} className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black transition-all ${copyFeedback === l.id ? 'bg-emerald-500 text-white shadow-lg':'bg-sky-50 text-black border border-sky-100 hover:bg-sky-100'}`}>{copyFeedback === l.id ? '已複製' : '複製網址'}</button></div>))}</div></div>)}
                                 <div className="space-y-4"><h3 className="font-black flex items-center gap-2 px-4 text-lg text-black"><Icon name="scissors" className="text-sky-400"/> 最終裁切清單 (含縫份)</h3>{currentTemplate.components.map(comp => { const res = calculate(comp, scaleInput.addW, scaleInput.addH, currentTemplate.seamAllowance); return (<div key={comp.id} className="bubble-card p-6 flex items-center gap-6 border-white shadow-sm"><div className="w-16 h-16 rounded-[1.5rem] bg-sky-400 text-white flex flex-col items-center justify-center font-black shadow-lg"><span className="text-[9px] opacity-70">數量</span><span className="text-2xl leading-none">{comp.quantity}</span></div><div className="flex-1"><div className="flex justify-between items-center mb-1"><span className="font-black text-lg text-black">{comp.name}</span><span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${comp.includeSA ? 'bg-cyan-400 text-white':'bg-slate-100 text-slate-400'}`}>{comp.includeSA ? '含縫份':'淨尺寸'}</span></div><div className="flex items-baseline gap-1"><span className="text-4xl font-black text-black">{res.w} <span className="text-xl font-normal text-sky-200">×</span> {res.h}</span><span className="text-xs font-black text-sky-200 uppercase ml-1">cm</span></div></div></div>);})}</div>
                                 <button onClick={() => setActiveTab('list')} className="w-full py-5 text-sky-300 font-black bg-white/60 border-2 border-white rounded-[2rem] shadow-sm active:scale-95 transition-all mb-4">返回列表</button>
                             </div>
