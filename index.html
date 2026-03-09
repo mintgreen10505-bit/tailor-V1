@@ -8,6 +8,7 @@
     <link rel="icon" type="image/jpeg" href="icon.jpg?v=12">
     <link rel="apple-touch-icon" type="image/jpeg" href="icon.jpg?v=12">    
     
+    <!-- 資源載入 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -16,168 +17,436 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
-        :root { --sea-salt-bg: #f7fdff; }
-        body { font-family: 'Noto Sans TC', sans-serif; background-color: var(--sea-salt-bg); color: #000; margin: 0; -webkit-tap-highlight-color: transparent; }
-        .bubble-card { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 8px 32px rgba(186, 230, 253, 0.2); border-radius: 2.5rem; }
-        .nav-glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px); border-top: 1px solid rgba(224, 242, 254, 0.5); }
-        .page-transition { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        :root {
+            --sea-salt-bg: #f7fdff; /* 極淺海鹽藍 */
+            --bubble-blue: #e0f2fe; /* 氣泡淺藍 */
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: var(--sea-salt-bg);
+            color: #000000; /* 確保字體為純黑 */
+            margin: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .bubble-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 8px 32px rgba(186, 230, 253, 0.2);
+            border-radius: 2.5rem;
+        }
+
+        .nav-glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(15px);
+            border-top: 1px solid rgba(224, 242, 254, 0.5);
+        }
+
+        .bubble-shadow {
+            box-shadow: 0 10px 30px rgba(224, 242, 254, 0.6);
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .page-transition {
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .google-btn {
+            background: white;
+            border: 1px solid #e0f2fe;
+            transition: all 0.2s;
+        }
+        .google-btn:hover {
+            background: #f0f9ff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(186, 230, 253, 0.3);
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
+    <!-- Firebase SDK 模組載入 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithCustomToken, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        window.FB = { initializeApp, getAuth, onAuthStateChanged, signOut, getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, GoogleAuthProvider, signInWithPopup };
+        // 橋接 Firebase 到全域，方便 React 使用
+        window.FB = { 
+            initializeApp, getAuth, onAuthStateChanged, 
+            signInWithEmailAndPassword, createUserWithEmailAndPassword, 
+            signOut, getFirestore, collection, doc, setDoc, 
+            deleteDoc, onSnapshot, query, signInWithCustomToken, 
+            GoogleAuthProvider, signInWithPopup 
+        };
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
 
+        // 🌟 強化版 Icon 組件 🌟
         const Icon = ({ name, size = 24, className = "" }) => {
             const iconRef = useRef(null);
             useEffect(() => {
-                if (iconRef.current && window.lucide) {
+                if (iconRef.current) {
                     iconRef.current.innerHTML = `<i data-lucide="${name}"></i>`;
-                    window.lucide.createIcons({ root: iconRef.current, attrs: { width: size, height: size, class: className, stroke: "currentColor", "stroke-width": 2 } });
+                    if (window.lucide) {
+                        window.lucide.createIcons({
+                            root: iconRef.current,
+                            attrs: {
+                                width: size,
+                                height: size,
+                                class: className,
+                                stroke: "currentColor",
+                                "stroke-width": 2
+                            }
+                        });
+                    }
                 }
             }, [name, size, className]);
+
             return <span ref={iconRef} className="inline-flex items-center justify-center"></span>;
         };
 
-        const COMPONENT_TYPES = [{ id: 'both', label: '全縮放' }, { id: 'width', label: '僅寬度' }, { id: 'height', label: '僅高度' }, { id: 'fixed', label: '固定' }];
+        const COMPONENT_TYPES = [
+            { id: 'both', label: '全縮放' },
+            { id: 'width', label: '僅寬度' },
+            { id: 'height', label: '僅高度' },
+            { id: 'fixed', label: '固定' },
+        ];
 
         function App() {
             const [user, setUser] = useState(null);
             const [authLoading, setAuthLoading] = useState(true);
+            const [isLocalMode, setIsLocalMode] = useState(false);
             const [activeTab, setActiveTab] = useState('list');
             const [templates, setTemplates] = useState([]);
             const [currentTemplate, setCurrentTemplate] = useState(null);
             const [scaleInput, setScaleInput] = useState({ addW: 0, addH: 0 });
+            const [copyFeedback, setCopyFeedback] = useState(null);
 
-            const firebaseConfig = {
-                apiKey: "AIzaSyAwajTS9acHu-AS3Ic2f50eThVgo6XxLEM",
-                authDomain: "mintgreen-app.firebaseapp.com",
-                projectId: "mintgreen-app",
-                storageBucket: "mintgreen-app.firebasestorage.app",
-                messagingSenderId: "952421896550",
-                appId: "1:952421896550:web:a8597a2727c9862e26f8a7"
-            };
-
+            // Firebase 設定
+            const firebaseConfig = JSON.parse(window.__firebase_config || "{}");
+            const appId = window.__app_id || 'sewing-scaler-app';
             const dbRef = useRef(null);
             const authRef = useRef(null);
 
+            // 1. 初始化 Firebase (Rule 3)
             useEffect(() => {
                 const setupFirebase = () => {
-                    if (window.FB) {
-                        const app = window.FB.initializeApp(firebaseConfig);
-                        authRef.current = window.FB.getAuth(app);
-                        dbRef.current = window.FB.getFirestore(app);
-                        window.FB.onAuthStateChanged(authRef.current, (u) => { setUser(u); setAuthLoading(false); });
+                    if (window.FB && firebaseConfig.apiKey) {
+                        try {
+                            const app = window.FB.initializeApp(firebaseConfig);
+                            authRef.current = window.FB.getAuth(app);
+                            dbRef.current = window.FB.getFirestore(app);
+
+                            const initAuth = async () => {
+                                if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+                                    await window.FB.signInWithCustomToken(authRef.current, window.__initial_auth_token);
+                                }
+                            };
+                            initAuth();
+
+                            window.FB.onAuthStateChanged(authRef.current, (u) => {
+                                setUser(u);
+                                setAuthLoading(false);
+                            });
+                        } catch (e) {
+                            console.error("Firebase Init Error:", e);
+                            setAuthLoading(false);
+                        }
+                    } else if (window.FB && !firebaseConfig.apiKey) {
+                        // 如果環境完全沒設定，才進入本地備援
+                        setAuthLoading(false);
                     }
                 };
+
                 if (window.FB) setupFirebase();
                 else window.addEventListener('firebase-ready', setupFirebase);
             }, []);
 
+            // 2. 資料同步 (Rule 1 & 2)
             useEffect(() => {
-                if (dbRef.current && user) {
-                    // 🌟 對接您截圖中的 inventory 集合 🌟
-                    const q = window.FB.query(window.FB.collection(dbRef.current, 'inventory', user.uid, 'items'), window.FB.orderBy('updatedAt', 'desc'));
-                    const unsubscribe = window.FB.onSnapshot(q, (snapshot) => {
-                        setTemplates(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-                    });
+                if (isLocalMode) {
+                    const saved = localStorage.getItem('sewing_templates_v3');
+                    if (saved) setTemplates(JSON.parse(saved));
+                    else setTemplates([]);
+                } else if (dbRef.current && user) {
+                    const templatesRef = window.FB.collection(dbRef.current, 'artifacts', appId, 'users', user.uid, 'templates');
+                    const unsubscribe = window.FB.onSnapshot(templatesRef, (snapshot) => {
+                        const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+                        setTemplates(data);
+                    }, (error) => console.error("Firestore Error:", error));
                     return () => unsubscribe();
+                } else {
+                    setTemplates([]);
                 }
-            }, [user]);
+            }, [user, isLocalMode]);
 
             const handleSave = async (data) => {
-                const id = data.id || Date.now().toString();
-                const docRef = window.FB.doc(dbRef.current, 'inventory', user.uid, 'items', id);
-                await window.FB.setDoc(docRef, { ...data, id, updatedAt: Date.now() });
+                const templateId = data.id || Date.now().toString();
+                const updatedData = { ...data, id: templateId, updatedAt: Date.now() };
+
+                if (isLocalMode) {
+                    const newTemplates = data.id ? templates.map(t => t.id === data.id ? updatedData : t) : [...templates, updatedData];
+                    setTemplates(newTemplates);
+                    localStorage.setItem('sewing_templates_v3', JSON.stringify(newTemplates));
+                } else if (dbRef.current && user) {
+                    const docRef = window.FB.doc(dbRef.current, 'artifacts', appId, 'users', user.uid, 'templates', templateId);
+                    await window.FB.setDoc(docRef, updatedData);
+                }
                 setActiveTab('list');
             };
 
             const handleDelete = async (id) => {
-                if (confirm("確定刪除此模板嗎？")) await window.FB.deleteDoc(window.FB.doc(dbRef.current, 'inventory', user.uid, 'items', id));
+                if (!confirm("確定要刪除這個模板嗎？")) return;
+                if (isLocalMode) {
+                    const newTemplates = templates.filter(t => t.id !== id);
+                    setTemplates(newTemplates);
+                    localStorage.setItem('sewing_templates_v3', JSON.stringify(newTemplates));
+                } else if (dbRef.current && user) {
+                    const docRef = window.FB.doc(dbRef.current, 'artifacts', appId, 'users', user.uid, 'templates', id);
+                    await window.FB.deleteDoc(docRef);
+                }
             };
 
             const calculateSize = (comp, addW, addH, sa) => {
-                let w = (parseFloat(comp.baseW) || 0) + (comp.type === 'both' || comp.type === 'width' ? parseFloat(addW) || 0 : 0);
-                let h = (parseFloat(comp.baseH) || 0) + (comp.type === 'both' || comp.type === 'height' ? parseFloat(addH) || 0 : 0);
+                let w = parseFloat(comp.baseW) || 0;
+                let h = parseFloat(comp.baseH) || 0;
                 const offset = comp.includeSA ? parseFloat(sa) || 0 : 0;
+                if (comp.type === 'both') { w += parseFloat(addW) || 0; h += parseFloat(addH) || 0; }
+                else if (comp.type === 'width') { w += parseFloat(addW) || 0; }
+                else if (comp.type === 'height') { h += parseFloat(addH) || 0; }
                 return { w: (w + 2 * offset).toFixed(1), h: (h + 2 * offset).toFixed(1) };
             };
 
-            if (authLoading) return <div className="h-screen flex items-center justify-center text-sky-400 font-black">海鹽藍工作台準備中...</div>;
+            const AuthForm = () => {
+                const [email, setEmail] = useState('');
+                const [password, setPassword] = useState('');
+                const [isSignUp, setIsSignUp] = useState(false);
+                const [error, setError] = useState('');
+                const [loading, setLoading] = useState(false);
 
-            if (!user) return (
-                <div className="h-screen flex flex-col items-center justify-center px-4">
-                    <div className="bubble-card p-10 w-full max-w-md text-center border-white shadow-2xl">
-                        <div className="bg-sky-400 w-20 h-20 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-6 shadow-lg"><Icon name="scissors" size={40} /></div>
-                        <h2 className="text-3xl font-black mb-2 italic">裁縫小助手</h2>
-                        <p className="text-slate-400 font-bold mb-10 text-sm">請登入以同步雲端作品</p>
-                        <button onClick={() => window.FB.signInWithPopup(authRef.current, new window.FB.GoogleAuthProvider())} className="w-full bg-sky-400 text-white font-black py-5 rounded-3xl shadow-xl flex items-center justify-center gap-3">
-                            <Icon name="chrome" size={20} /> Google 帳號登入
-                        </button>
+                // 🌟 Google 登入功能 🌟
+                const handleGoogleLogin = async () => {
+                    if (!authRef.current) return;
+                    setLoading(true);
+                    setError('');
+                    try {
+                        const provider = new window.FB.GoogleAuthProvider();
+                        await window.FB.signInWithPopup(authRef.current, provider);
+                    } catch (err) {
+                        console.error(err);
+                        if (err.code === 'auth/unauthorized-domain') {
+                            setError("網域未授權，請在 Firebase 控制台加入此網址。");
+                        } else {
+                            setError("Google 登入失敗，請確認 Firebase 設定。");
+                        }
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                const handleSubmit = async (e) => {
+                    e.preventDefault();
+                    if (!authRef.current) return;
+                    setLoading(true);
+                    setError('');
+                    try {
+                        if (isSignUp) await window.FB.createUserWithEmailAndPassword(authRef.current, email, password);
+                        else await window.FB.signInWithEmailAndPassword(authRef.current, email, password);
+                    } catch (err) { 
+                        setError("帳號或密碼錯誤。"); 
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                return (
+                    <div className="flex flex-col items-center justify-center min-h-[90vh] px-4">
+                        <div className="bubble-card p-10 w-full max-w-md border-white shadow-2xl">
+                            <div className="text-center mb-8">
+                                <div className="bg-sky-400 w-20 h-20 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-sky-100">
+                                    <Icon name="scissors" size={40} />
+                                </div>
+                                <h2 className="text-3xl font-black text-black tracking-tight">裁縫小助手</h2>
+                                <p className="text-slate-400 font-bold mt-2 text-sm">您的個人裁縫模板專家</p>
+                            </div>
+
+                            {loading ? (
+                                <div className="py-12 text-center">
+                                    <div className="w-10 h-10 border-4 border-sky-100 border-t-sky-400 rounded-full animate-spin mx-auto mb-4"></div>
+                                    <p className="text-sky-400 font-black">驗證中...</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    <form onSubmit={handleSubmit} className="space-y-4">
+                                        <input type="email" placeholder="電子信箱" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-black text-black" required />
+                                        <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-sky-50/50 p-4 rounded-2xl outline-none border-2 border-transparent focus:border-sky-200 font-black text-black" required />
+                                        {error && <div className="bg-rose-50 text-rose-500 text-[10px] font-black p-3 rounded-xl border border-rose-100">{error}</div>}
+                                        <button type="submit" className="w-full bg-sky-400 text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 transition-all">
+                                            {isSignUp ? '立即註冊' : '登入系統'}
+                                        </button>
+                                    </form>
+
+                                    <div className="relative">
+                                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-sky-100"></div></div>
+                                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 text-slate-300 font-black">快速登入</span></div>
+                                    </div>
+
+                                    <button 
+                                        onClick={handleGoogleLogin}
+                                        className="w-full google-btn text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95"
+                                    >
+                                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                                        </svg>
+                                        使用 Google 帳號登入
+                                    </button>
+
+                                    <div className="flex flex-col gap-4 mt-8">
+                                        <button onClick={() => setIsSignUp(!isSignUp)} className="text-sm font-bold text-sky-500 hover:underline">{isSignUp ? '已有帳號？返回登入' : '還沒有帳號？點此註冊'}</button>
+                                        <button onClick={() => setIsLocalMode(true)} className="text-xs font-black text-slate-300 hover:text-sky-300 uppercase tracking-widest border-t border-sky-50 pt-4">不登入，使用離線本地模式</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-            );
+                );
+            };
+
+            if (authLoading) return <div className="flex flex-col items-center justify-center min-h-screen"><div className="w-12 h-12 border-4 border-sky-100 border-t-sky-400 rounded-full animate-spin mb-4"></div><p className="text-sky-300 font-black">海鹽藍工作台準備中...</p></div>;
+            if (!user && !isLocalMode) return <AuthForm />;
 
             return (
-                <div className="max-w-2xl mx-auto min-h-screen px-4 pt-4 pb-32">
+                <div className="max-w-2xl mx-auto min-h-screen relative px-4 pt-4 pb-32">
                     <header className="flex justify-between items-center mb-8 px-2">
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('list')}><div className="bg-sky-400 p-2.5 rounded-[1.2rem] text-white shadow-lg"><Icon name="scissors" size={24} /></div><h1 className="text-2xl font-black italic">裁縫小助手</h1></div>
-                        <button onClick={() => window.FB.signOut(authRef.current)} className="p-2.5 text-slate-300 bg-white rounded-xl border border-sky-50 shadow-sm"><Icon name="log-out" size={18} /></button>
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('list')}>
+                            <div className="bg-sky-400 p-2.5 rounded-[1.2rem] text-white shadow-lg"><Icon name="scissors" size={24} /></div>
+                            <h1 className="text-2xl font-black italic text-black">裁縫小助手</h1>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {isLocalMode ? (
+                                <button onClick={() => setIsLocalMode(false)} className="text-[10px] font-black bg-amber-50 text-amber-500 px-3 py-1 rounded-full border border-amber-100">離線模式</button>
+                            ) : (
+                                <button onClick={() => window.FB.signOut(authRef.current)} className="p-2.5 text-slate-400 hover:text-rose-500 bg-white rounded-xl border border-sky-50 shadow-sm"><Icon name="log-out" size={20} /></button>
+                            )}
+                            {activeTab === 'list' && (
+                                <button onClick={() => { 
+                                    setCurrentTemplate({ name: '我的新包包', baseWidth: 14, baseHeight: 11.5, seamAllowance: 1.0, components: [{ id: Date.now(), name: '表布', baseW: 14, baseH: 11.5, type: 'both', quantity: 2, includeSA: true }], links: [] });
+                                    setActiveTab('edit');
+                                }} className="bg-sky-400 text-white px-6 py-2.5 rounded-full font-black shadow-md active:scale-95 transition-all">新增作品</button>
+                            )}
+                        </div>
                     </header>
 
                     <div className="page-transition">
                         {activeTab === 'list' && (
                             <div className="grid gap-4">
-                                {templates.length === 0 ? <div className="text-center py-20 bubble-card border-dashed border-2 border-sky-100 bg-transparent shadow-none"><Icon name="sparkles" size={48} className="mx-auto text-sky-100 mb-4" /><p className="text-sky-300 font-bold">歡迎！點擊下方「建立模板」開始</p></div> : templates.map(t => (
-                                    <div key={t.id} className="bubble-card p-6 flex justify-between items-center border-white shadow-sm hover:border-sky-100 transition-all">
-                                        <div className="flex-1 mr-4 overflow-hidden"><h3 className="text-xl font-black mb-1 truncate">{t.name}</h3><div className="flex gap-3 text-xs font-bold text-sky-400"><span className="bg-sky-50 px-2 py-0.5 rounded-lg">{t.baseWidth}×{t.baseHeight}cm</span><span>縫份 {t.seamAllowance}cm</span></div></div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => { setCurrentTemplate(t); setScaleInput({addW:0,addH:0}); setActiveTab('calculate'); }} className="p-3 text-sky-400 bg-sky-50 rounded-2xl hover:bg-sky-400 hover:text-white transition-all"><Icon name="calculator" size={20} /></button>
-                                            <button onClick={() => { setCurrentTemplate(t); setActiveTab('edit'); }} className="p-3 text-slate-300 bg-slate-50 rounded-2xl hover:bg-slate-200 transition-all"><Icon name="edit-3" size={20} /></button>
-                                            <button onClick={() => handleDelete(t.id)} className="p-3 text-rose-200 bg-rose-50 rounded-2xl hover:bg-rose-500 hover:text-white transition-all"><Icon name="trash-2" size={20} /></button>
-                                        </div>
+                                {templates.length === 0 ? (
+                                    <div className="text-center py-20 bubble-card border-dashed border-2 border-sky-100 shadow-none bg-transparent">
+                                        <Icon name="sparkles" size={48} className="mx-auto text-sky-100 mb-4" />
+                                        <p className="text-sky-300 font-bold">歡迎回來！{user?.email ? user.email.split('@')[0] : '設計師'}</p>
+                                        <p className="text-slate-300 text-xs mt-2">點擊按鈕開始建立您的第一個模板吧！</p>
                                     </div>
-                                ))}
+                                ) : (
+                                    templates.map(t => (
+                                        <div key={t.id} className="bubble-card p-6 flex justify-between items-center border-white shadow-sm hover:border-sky-100 transition-all">
+                                            <div className="flex-1 mr-4 overflow-hidden">
+                                                <h3 className="text-xl font-black mb-1 truncate text-black">{t.name}</h3>
+                                                <div className="flex gap-3 text-sm font-bold">
+                                                    <span className="bg-sky-50 text-sky-600 px-2 py-0.5 rounded-lg">{t.baseWidth}×{t.baseHeight}cm</span>
+                                                    <span className="text-cyan-500 font-black">縫份 {t.seamAllowance}cm</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => { setCurrentTemplate(t); setScaleInput({addW:0,addH:0}); setActiveTab('calculate'); }} className="p-3 text-sky-400 bg-sky-50 rounded-2xl hover:bg-sky-400 hover:text-white transition-all shadow-sm"><Icon name="calculator" size={20} /></button>
+                                                <button onClick={() => { setCurrentTemplate(t); setActiveTab('edit'); }} className="p-3 text-slate-400 bg-slate-50 rounded-2xl hover:bg-slate-200 hover:text-black transition-all shadow-sm"><Icon name="settings-2" size={20} /></button>
+                                                <button onClick={() => handleDelete(t.id)} className="p-3 text-rose-300 bg-rose-50 rounded-2xl hover:bg-rose-500 hover:text-white transition-all shadow-sm"><Icon name="trash-2" size={20} /></button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         )}
 
                         {activeTab === 'edit' && currentTemplate && (
                             <div className="space-y-6">
                                 <div className="bubble-card p-8 border-white shadow-sm">
-                                    <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Icon name="settings-2" className="text-sky-400"/> 基本設定</h2>
-                                    <div className="space-y-4">
-                                        <div className="bg-sky-50/30 p-5 rounded-[2rem] border border-sky-100"><label className="text-[10px] font-black text-sky-400 uppercase tracking-widest ml-2 block mb-2">作品名稱</label><input type="text" value={currentTemplate.name} onChange={e => setCurrentTemplate({...currentTemplate, name: e.target.value})} className="w-full bg-transparent font-black text-xl outline-none" placeholder="作品名稱" /></div>
+                                    <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-black"><Icon name="settings-2" className="text-sky-400"/> 基本設定</h2>
+                                    <div className="space-y-6">
+                                        <div><label className="text-xs font-black text-black/30 block mb-2 tracking-widest uppercase">作品名稱</label><input type="text" value={currentTemplate.name} onChange={e => setCurrentTemplate({...currentTemplate, name: e.target.value})} className="w-full bg-sky-50/50 border-2 border-transparent focus:border-sky-100 rounded-2xl p-4 font-black outline-none transition-all text-black" /></div>
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-sky-50/30 p-5 rounded-[2rem] border border-sky-100"><label className="text-[10px] font-black text-sky-400 ml-2 block mb-2 uppercase tracking-widest">基準 (W×H)</label><div className="flex gap-2"><input type="number" value={currentTemplate.baseWidth} onChange={e => setCurrentTemplate({...currentTemplate, baseWidth: e.target.value})} className="w-full bg-transparent font-black text-center outline-none" /><input type="number" value={currentTemplate.baseHeight} onChange={e => setCurrentTemplate({...currentTemplate, baseHeight: e.target.value})} className="w-full bg-transparent font-black text-center outline-none" /></div></div>
-                                            <div className="bg-cyan-50/50 p-5 rounded-[2rem] border border-cyan-100"><label className="text-[10px] font-black text-cyan-500 ml-2 block mb-2 uppercase tracking-widest">預設縫份 (cm)</label><input type="number" step="0.1" value={currentTemplate.seamAllowance} onChange={e => setCurrentTemplate({...currentTemplate, seamAllowance: e.target.value})} className="w-full bg-transparent font-black text-center outline-none text-cyan-600" /></div>
+                                            <div><label className="text-xs font-black text-black/30 mb-2 block tracking-widest uppercase">基準寬×高 (cm)</label><div className="flex items-center gap-2"><input type="number" value={currentTemplate.baseWidth} onChange={e => setCurrentTemplate({...currentTemplate, baseWidth: e.target.value})} className="w-full bg-sky-50/30 rounded-2xl p-4 text-center font-black outline-none text-black" /><input type="number" value={currentTemplate.baseHeight} onChange={e => setCurrentTemplate({...currentTemplate, baseHeight: e.target.value})} className="w-full bg-sky-50/30 rounded-2xl p-4 text-center font-black outline-none text-black" /></div></div>
+                                            <div><label className="text-xs font-black text-black/30 mb-2 block tracking-widest uppercase">預設縫份 (cm)</label><input type="number" step="0.1" value={currentTemplate.seamAllowance} onChange={e => setCurrentTemplate({...currentTemplate, seamAllowance: e.target.value})} className="w-full bg-cyan-50 border-2 border-cyan-100 rounded-2xl p-4 text-center font-black text-cyan-600 outline-none" /></div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center px-4"><h2 className="text-xl font-black flex items-center gap-2 text-black"><Icon name="ruler" className="text-sky-400"/> 零件配置</h2><button onClick={() => setCurrentTemplate({...currentTemplate, components: [...currentTemplate.components, { id: Date.now(), name: '新零件', baseW: 10, baseH: 10, type: 'both', quantity: 1, includeSA: true }]})} className="bg-sky-400 text-white px-5 py-2 rounded-2xl font-black text-sm shadow-md active:scale-95">+ 增加零件</button></div>
+
+                                <div className="bubble-card p-8 border-white shadow-sm">
+                                    <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black flex items-center gap-2 text-black"><Icon name="link" className="text-sky-400"/> 教學與資源連結</h2><button onClick={() => setCurrentTemplate({...currentTemplate, links: [...(currentTemplate.links || []), {id: Date.now(), title:'', url:''}]})} className="text-xs font-black text-sky-500 bg-sky-50 px-3 py-1.5 rounded-xl hover:bg-sky-100 transition-colors">+ 新增連結</button></div>
+                                    <div className="space-y-4">{(currentTemplate.links || []).map((link, idx) => (<div key={link.id} className="flex gap-3 p-4 bg-sky-50/20 rounded-[1.5rem] items-center"><div className="flex-1 space-y-2"><input type="text" placeholder="教學標題" value={link.title} onChange={e => { const nl = [...currentTemplate.links]; nl[idx].title = e.target.value; setCurrentTemplate({...currentTemplate, links: nl}); }} className="w-full bg-white p-2 rounded-lg text-sm font-black outline-none text-black" /><input type="text" placeholder="URL" value={link.url} onChange={e => { const nl = [...currentTemplate.links]; nl[idx].url = e.target.value; setCurrentTemplate({...currentTemplate, links: nl}); }} className="w-full bg-white/50 p-2 rounded-lg text-xs font-medium outline-none text-black/60" /></div><button onClick={() => setCurrentTemplate({...currentTemplate, links: currentTemplate.links.filter((_, i) => i !== idx)})} className="text-rose-300 hover:text-rose-500 transition-colors"><Icon name="trash-2" size={20} /></button></div>))}</div>
+                                </div>
+
+                                <div className="space-y-4 pb-12">
+                                    <div className="flex justify-between items-center px-4"><h2 className="text-xl font-black flex items-center gap-2 text-black"><Icon name="ruler" className="text-sky-400"/> 零件清單</h2><button onClick={() => setCurrentTemplate({...currentTemplate, components: [...currentTemplate.components, { id: Date.now(), name: '新零件', baseW: 10, baseH: 10, type: 'both', quantity: 1, includeSA: true }]})} className="bg-sky-400 text-white px-5 py-2 rounded-2xl font-black text-sm shadow-md active:scale-95 transition-all">+ 新增零件</button></div>
                                     {currentTemplate.components.map((comp, idx) => (
                                         <div key={comp.id} className="bubble-card p-6 border-white space-y-4 shadow-sm">
-                                            <div className="flex justify-between items-center"><input type="text" value={comp.name} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].name = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="font-black text-xl bg-transparent border-b-2 border-transparent focus:border-sky-100 outline-none w-full mr-4" /><div onClick={() => { const nc = [...currentTemplate.components]; nc[idx].includeSA = !nc[idx].includeSA; setCurrentTemplate({...currentTemplate, components: nc}); }} className={`w-10 h-5 rounded-full relative transition-all ${comp.includeSA ? 'bg-sky-400':'bg-slate-200'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${comp.includeSA ? 'left-6':'left-1'}`} /></div></div>
-                                            <div className="grid grid-cols-4 gap-2">
-                                                {['baseW', 'baseH', 'quantity'].map((k, i) => <div key={k} className="text-center"><label className="text-[8px] font-black text-black/20 block mb-1">{['寬','高','量'][i]}</label><input type="number" value={comp[k]} onChange={e => { const nc = [...currentTemplate.components]; nc[idx][k] = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none" /></div>)}
-                                                <div className="text-center"><label className="text-[8px] font-black text-black/20 block mb-1">規則</label><select value={comp.type} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].type = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl font-black text-[9px] outline-none text-center"><option value="both">全縮放</option><option value="width">僅寬</option><option value="height">僅高</option><option value="fixed">固定</option></select></div>
+                                            <div className="flex justify-between items-center"><input type="text" value={comp.name} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].name = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="font-black text-xl bg-transparent border-b-2 border-transparent focus:border-sky-100 outline-none w-full mr-4 text-black" /><label className="flex items-center gap-2 cursor-pointer shrink-0"><span className={`text-[10px] font-black uppercase ${comp.includeSA ? 'text-black':'text-slate-300'}`}>縫份</span><div onClick={() => { const nc = [...currentTemplate.components]; nc[idx].includeSA = !nc[idx].includeSA; setCurrentTemplate({...currentTemplate, components: nc}); }} className={`w-10 h-5 rounded-full relative transition-all ${comp.includeSA ? 'bg-sky-400':'bg-slate-200'}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm transition-all ${comp.includeSA ? 'left-6':'left-1'}`} /></div></label><button onClick={() => setCurrentTemplate({...currentTemplate, components: currentTemplate.components.filter((_, i) => i !== idx)})} className="text-slate-200 hover:text-rose-500 transition-all"><Icon name="trash-2" size={18}/></button></div>
+                                            <div className="grid grid-cols-4 gap-3">
+                                                {[{k:'baseW',l:'寬'},{k:'baseH',l:'高'},{k:'quantity',l:'數量'}].map(f => (<div key={f.k} className="text-center"><label className="text-[9px] font-black text-black/20 block mb-1">{f.l}</label><input type="number" value={comp[f.k]} onChange={e => { const nc = [...currentTemplate.components]; nc[idx][f.k] = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl text-center font-black outline-none text-black" /></div>))}
+                                                <div className="text-center"><label className="text-[9px] font-black text-black/20 block mb-1">規則</label><select value={comp.type} onChange={e => { const nc = [...currentTemplate.components]; nc[idx].type = e.target.value; setCurrentTemplate({...currentTemplate, components: nc}); }} className="w-full bg-sky-50/50 p-2 rounded-xl font-black text-[10px] outline-none appearance-none text-center text-black">{COMPONENT_TYPES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}</select></div>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex gap-4 pt-6 px-2"><button onClick={() => handleSave(currentTemplate)} className="flex-1 bg-sky-400 text-white font-black py-5 rounded-[2.5rem] shadow-xl active:scale-95 transition-all">同步雲端儲存</button><button onClick={() => setActiveTab('list')} className="px-10 bg-slate-50 text-slate-300 font-black py-5 rounded-[2.5rem]">取消</button></div>
+
+                                <div className="flex gap-4 pt-6 pb-20 px-2">
+                                    <button onClick={() => handleSave(currentTemplate)} className="flex-1 bg-sky-400 text-white font-black py-5 rounded-[2rem] shadow-xl active:scale-95 transition-all">{isLocalMode ? '儲存至設備' : '同步至雲端'}</button>
+                                    <button onClick={() => setActiveTab('list')} className="px-10 bg-slate-100 text-slate-500 font-black py-5 rounded-[2rem] hover:bg-slate-200 transition-colors">取消</button>
+                                </div>
                             </div>
                         )}
 
-                        {activeTab ===
+                        {activeTab === 'calculate' && currentTemplate && (
+                            <div className="space-y-8 animate-in fade-in pb-20">
+                                <div className="bg-gradient-to-br from-sky-300 via-sky-400 to-cyan-400 text-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden"><div className="absolute -right-10 -top-10 w-48 h-48 bg-white/10 rounded-full blur-2xl"></div><h2 className="text-3xl font-black mb-8 relative z-10">{currentTemplate.name}</h2><div className="grid grid-cols-2 gap-8 relative z-10"><div className="space-y-3"><label className="text-[10px] font-black opacity-80 uppercase tracking-widest ml-4">寬度增加 (W)</label><input type="number" value={scaleInput.addW} onChange={e => setScaleInput({...scaleInput, addW: e.target.value})} className="w-full bg-white/20 backdrop-blur-md border-2 border-white/30 rounded-[2rem] p-6 text-white font-black text-4xl outline-none" /></div><div className="space-y-3"><label className="text-[10px] font-black opacity-80 uppercase tracking-widest ml-4">高度增加 (H)</label><input type="number" value={scaleInput.addH} onChange={e => setScaleInput({...scaleInput, addH: e.target.value})} className="w-full bg-white/20 backdrop-blur-md border-2 border-white/30 rounded-[2rem] p-6 text-white font-black text-4xl outline-none" /></div></div></div>
+                                {currentTemplate.links?.length > 0 && (<div className="space-y-3"><h3 className="font-black flex items-center gap-2 px-4 text-lg text-black"><Icon name="book-open" className="text-sky-400"/> 教學與參考連結</h3><div className="grid gap-2">{currentTemplate.links.map(l => (<div key={l.id} className="bubble-card p-5 flex items-center justify-between border-white shadow-sm"><div className="flex-1 overflow-hidden mr-4"><h4 className="font-black text-sm truncate text-black">{l.title || '教學連結'}</h4><p className="text-[10px] text-sky-400 font-bold truncate">{l.url}</p></div><button onClick={() => { const el = document.createElement('textarea'); el.value = l.url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); setCopyFeedback(l.id); setTimeout(() => setCopyFeedback(null), 2000); }} className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black transition-all ${copyFeedback === l.id ? 'bg-emerald-500 text-white shadow-lg':'bg-sky-50 text-black border border-sky-100 hover:bg-sky-100'}`}>{copyFeedback === l.id ? '已複製' : '複製網址'}</button></div>))}</div></div>)}
+                                <div className="space-y-4"><h3 className="font-black flex items-center gap-2 px-4 text-lg text-black"><Icon name="scissors" className="text-sky-400"/> 最終裁切清單 (含縫份)</h3>{currentTemplate.components.map(comp => { const res = calculateSize(comp, scaleInput.addW, scaleInput.addH, currentTemplate.seamAllowance); return (<div key={comp.id} className="bubble-card p-6 flex items-center gap-6 border-white shadow-sm"><div className="w-16 h-16 rounded-[1.5rem] bg-sky-400 text-white flex flex-col items-center justify-center font-black shadow-lg"><span className="text-[9px] opacity-70">數量</span><span className="text-2xl leading-none">{comp.quantity}</span></div><div className="flex-1"><div className="flex justify-between items-center mb-1"><span className="font-black text-lg text-black">{comp.name}</span><span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${comp.includeSA ? 'bg-cyan-400 text-white':'bg-slate-100 text-slate-400'}`}>{comp.includeSA ? '含縫份':'淨尺寸'}</span></div><div className="flex items-baseline gap-1"><span className="text-4xl font-black text-black">{res.w} <span className="text-xl font-normal text-sky-200">×</span> {res.h}</span><span className="text-xs font-black text-sky-200 uppercase ml-1">cm</span></div></div></div>);})}</div>
+                                <button onClick={() => setActiveTab('list')} className="w-full py-5 text-sky-300 font-black bg-white/60 border-2 border-white rounded-[2rem] shadow-sm active:scale-95 transition-all mb-4 text-black">返回列表</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <nav className="fixed bottom-6 left-6 right-6 max-w-2xl mx-auto z-40 p-3 rounded-[2.5rem] nav-glass flex justify-around items-center bubble-shadow border border-sky-50 shadow-xl">
+                        <button onClick={() => setActiveTab('list')} className={`flex flex-col items-center py-2 px-8 rounded-2xl transition-all duration-300 ${activeTab === 'list' ? 'text-black bg-sky-50 font-black shadow-inner scale-105' : 'text-slate-300 font-bold hover:text-sky-300'}`}><Icon name="home" size={22} className="mb-1" /><span className="text-[10px]">我的作品</span></button>
+                        <button onClick={() => { setCurrentTemplate({ name: '新作品', baseWidth: 14, baseHeight: 11.5, seamAllowance: 1.0, components: [{ id: Date.now(), name: '表布', baseW: 14, baseH: 11.5, type: 'both', quantity: 2, includeSA: true }], links: [] }); setActiveTab('edit'); }} className={`flex flex-col items-center py-2 px-8 rounded-2xl transition-all duration-300 ${activeTab === 'edit' ? 'text-black bg-sky-50 font-black shadow-inner scale-105' : 'text-slate-300 font-bold hover:text-sky-300'}`}><Icon name="plus" size={22} className="mb-1" /><span className="text-[10px]">建立模板</span></button>
+                        <button onClick={() => { if(currentTemplate) setActiveTab('calculate'); }} className={`flex flex-col items-center py-2 px-8 rounded-2xl transition-all duration-300 ${activeTab === 'calculate' ? 'text-black bg-sky-50 font-black shadow-inner scale-105' : 'text-slate-300 font-bold hover:text-sky-300'} ${!currentTemplate ? 'opacity-20 pointer-events-none':''}`}><Icon name="calculator" size={22} className="mb-1" /><span className="text-[10px]">尺寸計算</span></button>
+                    </nav>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
